@@ -141,7 +141,9 @@ fun EditorScreen(wordId: String?, onClose: () -> Unit) {
 
     fun choose(entry: DictEntry?) {
         val next = if (entry == null) {
-            draft.copy(kanji = "", kana = converted, display = DisplayMode.KANA, meaningEn = "", pos = emptyList())
+            // Kana only, but keep the dictionary's English gloss as a hint for the AI and the card back.
+            val same = candidates.firstOrNull { it.reading == converted }
+            draft.copy(kanji = "", kana = converted, display = DisplayMode.KANA, meaningEn = same?.gloss.orEmpty(), pos = same?.pos.orEmpty())
         } else {
             draft.copy(
                 kanji = entry.kanji.orEmpty(),
@@ -370,6 +372,7 @@ private fun CandidateSection(converted: String, candidates: List<DictEntry>, dra
                         if (e.common) Pill("常用", container = MaterialTheme.colorScheme.tertiaryContainer, content = MaterialTheme.colorScheme.onTertiaryContainer)
                     }
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        e.baseForm?.let { Pill("ます形 · 原形 $it") }
                         e.pos.mapNotNull(::posLabel).distinct().take(3).forEach { Pill(it) }
                         if (e.usuallyKana && e.kanji != null) Pill("通常寫假名")
                     }

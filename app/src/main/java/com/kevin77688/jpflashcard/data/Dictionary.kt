@@ -2,6 +2,7 @@ package com.kevin77688.jpflashcard.data
 
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
+import com.kevin77688.jpflashcard.domain.Conjugation
 import com.kevin77688.jpflashcard.domain.Romaji
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
@@ -17,6 +18,8 @@ data class DictEntry(
     val common: Boolean,
     /** JMdict "usually written using kana alone" — default the card to kana display. */
     val usuallyKana: Boolean,
+    /** Set when this is a conjugated form (e.g. 出かけます): the dictionary form it came from. */
+    val baseForm: String? = null,
 )
 
 /**
@@ -60,7 +63,8 @@ class Dictionary(private val context: Context) {
         if (raw.isEmpty()) return emptyList()
         val q = if (raw.any { it in 'a'..'z' || it in 'A'..'Z' }) Romaji.toKana(raw) else Romaji.toHiragana(raw)
         val database = open()
-        return withContext(Dispatchers.IO) {
+        val polite = politeForms(database, q)
+        return polite + withContext(Dispatchers.IO) {
             val hasKanji = q.any { Character.UnicodeScript.of(it.code) == Character.UnicodeScript.HAN }
             val column = if (hasKanji) "kanji" else "reading"
             val sql = """
@@ -88,6 +92,43 @@ class Dictionary(private val context: Context) {
                     }
                 }.distinctBy { it.kanji to it.reading }
             }
+        }
+    }
+
+    /**
+     * でかけます is not in the dictionary, but 出かける is. Guess dictionary forms from the ます stem,
+     * keep only verbs that really conjugate back to the same stem, and return them in the polite form.
+     */
+    private suspend fun politeForms(database: SQLiteDatabase, query: String): List<DictEntry> {
+        if (query.any { Character.UnicodeScript.of(it.code) == Character.UnicodeScript.HAN }) return emptyList()
+        val (stem, suffix) = Conjugation.splitPolite(query) ?: return emptyList()
+        val hiraStem = Romaji.toHiragana(stem)
+        return withContext(Dispatchers.IO) {
+            Conjugation.dictionaryCandidates(hiraStem).flatMap { candidate ->
+                database.rawQuery(
+                    "SELECT kanji, reading, gloss, pos, common, uk FROM entries WHERE reading = ? ORDER BY common DESC, id",
+                    arrayOf(candidate),
+                ).use { c ->
+                    buildList {
+                        while (c.moveToNext()) {
+                            val pos = c.getString(3).split(',').filter { it.isNotBlank() }
+                            if (Conjugation.masuStem(c.getString(1), pos) != hiraStem) continue
+                            val kanji = c.getString(0)
+                            add(
+                                DictEntry(
+                                    kanji = kanji?.let { k -> Conjugation.masuStem(k, pos)?.plus(suffix) },
+                                    reading = query,
+                                    gloss = c.getString(2),
+                                    pos = pos,
+                                    common = c.getInt(4) == 1,
+                                    usuallyKana = c.getInt(5) == 1,
+                                    baseForm = kanji ?: c.getString(1),
+                                ),
+                            )
+                        }
+                    }
+                }
+            }.sortedByDescending { it.common }.distinctBy { it.kanji to it.reading }
         }
     }
 
