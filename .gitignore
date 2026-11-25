@@ -22,3 +22,6 @@ captures/
 *.jks
 secrets.properties
 .env
+
+# Firebase config (keep out of the public repo)
+google-services.json
