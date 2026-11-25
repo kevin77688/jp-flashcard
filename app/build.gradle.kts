@@ -33,11 +33,6 @@ android {
     buildFeatures {
         compose = true
     }
-
-    androidResources {
-        // The bundled dictionary is already a compact SQLite file.
-        noCompress += "db"
-    }
 }
 
 dependencies {
