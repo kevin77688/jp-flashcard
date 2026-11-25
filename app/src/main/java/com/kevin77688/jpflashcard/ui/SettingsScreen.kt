@@ -1,6 +1,11 @@
 package com.kevin77688.jpflashcard.ui
 
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import com.kevin77688.jpflashcard.domain.WordCsv
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.ui.draw.clip
@@ -123,6 +128,8 @@ fun SettingsScreen() {
 
             LlmGroup(settings) { f -> update(f) }
 
+            DataGroup()
+
             Group("關於") {
                 Text("日語字卡 0.1.0", style = MaterialTheme.typography.titleSmall)
                 Text(
@@ -238,5 +245,62 @@ private fun ToggleRow(title: String, subtitle: String, checked: Boolean, onChang
             Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Switch(checked = checked, onCheckedChange = null)
+    }
+}
+
+/** CSV export/import through the system file picker (Drive, Downloads, …). */
+@Composable
+private fun DataGroup() {
+    val container = LocalContainer.current
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val words by container.words.collectAsState()
+    var message by remember { mutableStateOf<String?>(null) }
+
+    val exporter = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        val snapshot = words
+        scope.launch {
+            message = runCatching {
+                withContext(Dispatchers.IO) {
+                    context.contentResolver.openOutputStream(uri)!!.use { it.write(WordCsv.export(snapshot).toByteArray()) }
+                }
+                "已匯出 ${snapshot.size} 個單字"
+            }.getOrElse { "匯出失敗：${it.message}" }
+        }
+    }
+    val importer = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            message = runCatching {
+                val text = withContext(Dispatchers.IO) {
+                    context.contentResolver.openInputStream(uri)!!.use { it.readBytes().toString(Charsets.UTF_8) }
+                }
+                val result = WordCsv.import(text)
+                // Skip words that are already in the list (same kanji and kana).
+                val existing = container.words.value.map { it.kanji.orEmpty() to it.kana }.toSet()
+                val fresh = result.drafts.filter { (it.kanji to it.kana) !in existing }.distinctBy { it.kanji to it.kana }
+                fresh.forEach { container.cards.addWord(it) }
+                buildString {
+                    append("已匯入 ${fresh.size} 個單字")
+                    val dup = result.drafts.size - fresh.size
+                    if (dup > 0) append("，$dup 個已經有了")
+                    if (result.skipped > 0) append("，${result.skipped} 列沒有讀音所以略過")
+                }
+            }.getOrElse { "匯入失敗：${it.message}" }
+        }
+    }
+
+    Group("資料") {
+        Text(
+            "CSV 欄位：kanji, kana, meaning, meaning_en, display, note, pos。自己做的表格只要有 kana（可以打羅馬拼音）就能匯入，複習進度不會匯出。",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            FilledTonalButton(onClick = { exporter.launch("jp-flashcard-words.csv") }, enabled = words.isNotEmpty(), shape = RoundedCornerShape(12.dp)) { Text("匯出 CSV") }
+            OutlinedButton(onClick = { importer.launch(arrayOf("text/*", "application/csv", "application/vnd.ms-excel")) }, shape = RoundedCornerShape(12.dp)) { Text("匯入 CSV") }
+        }
+        message?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary) }
     }
 }

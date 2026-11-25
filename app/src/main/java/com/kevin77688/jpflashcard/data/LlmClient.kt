@@ -71,14 +71,28 @@ class LlmClient {
                 if (reading.isNotBlank() && reading != written) append("（讀音：").append(reading).append("）")
                 if (englishHint.isNotBlank()) append("\n英文詞典參考：").append(englishHint.replace('\n', ' '))
             }
-            val raw = chat(settings, system, user)
-            val json = JSONObject(raw.substring(raw.indexOf('{'), raw.lastIndexOf('}') + 1))
-            fun opt(key: String) = json.optString(key).takeIf { it.isNotBlank() && it != "null" }
-            WordSuggestion(
-                meaning = opt("meaning").orEmpty(),
-                dictionaryForm = opt("dictionary_form"),
-                dictionaryReading = opt("dictionary_reading"),
-                note = opt("note").orEmpty(),
-            )
+            // Models occasionally return slightly broken JSON; one retry usually fixes it.
+            val first = runCatching { parseSuggestion(chat(settings, system, user)) }
+            first.getOrNull() ?: parseSuggestion(chat(settings, system, user))
         }
+
+    private fun parseSuggestion(raw: String): WordSuggestion {
+        val start = raw.indexOf('{')
+        val end = raw.lastIndexOf('}')
+        val json = if (start >= 0 && end > start) runCatching { JSONObject(raw.substring(start, end + 1)) }.getOrNull() else null
+        fun opt(key: String): String? {
+            val value = if (json != null) json.optString(key) else {
+                // Lenient fallback: pull "key": "value" out of text that is not valid JSON.
+                Regex("\"$key\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"").find(raw)?.groupValues?.get(1)
+            }
+            return value?.trim()?.takeIf { it.isNotBlank() && it != "null" }
+        }
+        val meaning = opt("meaning") ?: throw IllegalStateException("AI 回覆的格式看不懂")
+        return WordSuggestion(
+            meaning = meaning,
+            dictionaryForm = opt("dictionary_form"),
+            dictionaryReading = opt("dictionary_reading"),
+            note = opt("note").orEmpty(),
+        )
+    }
 }

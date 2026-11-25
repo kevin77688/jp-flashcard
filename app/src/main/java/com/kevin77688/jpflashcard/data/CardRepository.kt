@@ -62,6 +62,17 @@ class CardRepository(private val auth: AuthRepository) {
             .update(draft.toMap() + mapOf("updatedAt" to System.currentTimeMillis()))
     }
 
+    /** Fills in AI-suggested text without touching fields the user may be editing elsewhere. */
+    fun fillMeaning(id: String, meaning: String, note: String?) {
+        val uid = uidOrNull() ?: return
+        val fields = buildMap<String, Any> {
+            put("meaning", meaning)
+            if (note != null) put("note", note)
+            put("updatedAt", System.currentTimeMillis())
+        }
+        userDoc(uid).collection("words").document(id).update(fields)
+    }
+
     fun deleteWord(id: String) {
         val uid = uidOrNull() ?: return
         userDoc(uid).collection("words").document(id).delete()

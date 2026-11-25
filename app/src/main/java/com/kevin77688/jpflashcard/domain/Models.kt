@@ -49,3 +49,5 @@ enum class ReviewMode(val label: String, val hint: String) {
     LISTENING("聽力", "聽發音想是哪個字"),
     CHOICE("選擇", "四選一"),
 }
+
+fun WordCard.toDraft() = WordDraft(kanji.orEmpty(), kana, meaning, meaningEn, pos, display, note)
