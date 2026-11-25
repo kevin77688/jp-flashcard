@@ -25,3 +25,8 @@ secrets.properties
 
 # Firebase config (keep out of the public repo)
 google-services.json
+
+# VOICEVOX engine files, fetched by tools/fetch_voicevox.sh (too large for git)
+/third_party/voicevox/
+/app/src/main/jniLibs/
+/app/src/main/assets/voicevox/

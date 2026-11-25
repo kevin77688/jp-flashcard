@@ -155,7 +155,7 @@ fun EditorScreen(wordId: String?, onClose: () -> Unit) {
         }
         draft = next
         baseFormHint = null
-        container.speaker.speak(next.kana, settings.speechRate)
+        container.speaker.speak(next.kana, settings.speechRate, next.kanji)
         if (next.meaning.isBlank()) askAi(next)
     }
 
@@ -216,7 +216,7 @@ fun EditorScreen(wordId: String?, onClose: () -> Unit) {
                     }
                     baseFormHint = null
                 },
-                onSpeak = { container.speaker.speak(draft.kana, settings.speechRate) },
+                onSpeak = { container.speaker.speak(draft.kana, settings.speechRate, draft.kanji) },
             )
         }
 

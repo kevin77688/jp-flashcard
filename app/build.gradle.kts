@@ -17,6 +17,8 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "0.1.0"
+        // Both devices are arm64, and the VOICEVOX speech engine ships about 25 MB of native code per ABI.
+        ndk { abiFilters += "arm64-v8a" }
     }
 
     buildTypes {
@@ -59,6 +61,8 @@ dependencies {
     implementation(libs.googleid)
     implementation(libs.coroutines.play)
     implementation(libs.okhttp)
+    // VOICEVOX neural Japanese speech (run tools/fetch_voicevox.sh first).
+    implementation("jp.hiroshiba.voicevoxcore:voicevoxcore-android:0.17.1")
 
     testImplementation(libs.junit)
 }

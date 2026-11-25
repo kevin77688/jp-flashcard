@@ -1,82 +1,78 @@
 package com.kevin77688.jpflashcard.data
 
 import android.content.Context
-import android.speech.tts.TextToSpeech
-import android.speech.tts.UtteranceProgressListener
+import android.media.AudioAttributes
+import android.media.MediaPlayer
 import android.util.Log
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import java.util.Locale
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import java.io.File
 
 /**
- * Japanese text-to-speech. Binds to Google's engine explicitly because device defaults vary
- * (the phone defaults to Samsung TTS, the tablet has no default set); falls back to the default.
+ * Plays Japanese speech. Uses VOICEVOX when it is selected and ready; until then (first run unpacks
+ * ~170 MB) and on any error it falls back to the system TTS, so a tap always makes a sound.
  */
-class Speaker(context: Context) {
-    enum class State { Initializing, Ready, MissingVoice, Unavailable }
+class Speaker(
+    context: Context,
+    private val scope: CoroutineScope,
+    /** Kanji spellings the dictionary knows for a kana reading, used to get the right pitch accent. */
+    private val spellingsFor: suspend (String) -> List<String>,
+) {
+    val system = SystemTts(context)
+    val voicevox = VoicevoxEngine(context)
 
-    private val appContext = context.applicationContext
-    private val _state = MutableStateFlow(State.Initializing)
-    val state: StateFlow<State> = _state
+    /** Follows the 發音引擎 setting. */
+    var useVoicevox: Boolean = true
+        set(value) {
+            field = value
+            if (value && voicevox.bundled) scope.launch { runCatching { voicevox.prepare() } }
+        }
 
-    private var tts: TextToSpeech? = null
-    private var triedFallback = false
+    private var job: Job? = null
+    private var player: MediaPlayer? = null
 
-    init {
-        create(GOOGLE_ENGINE)
-    }
-
-    private fun create(engine: String?) {
-        tts = TextToSpeech(appContext, { status -> onInit(status, engine) }, engine)
-    }
-
-    private fun onInit(status: Int, engine: String?) {
-        val engineInstance = tts ?: return
-        if (status != TextToSpeech.SUCCESS) {
-            Log.w(TAG, "TTS init failed for engine=$engine status=$status")
-            if (!triedFallback) {
-                triedFallback = true
-                engineInstance.shutdown()
-                create(null)
-            } else {
-                _state.value = State.Unavailable
-            }
+    /** Speaks [kana]. Pass [written] (the card's kanji spelling) when there is one. */
+    fun speak(kana: String, rate: Float = 0.9f, written: String? = null) {
+        if (kana.isBlank()) return
+        job?.cancel()
+        stopPlayer()
+        if (!useVoicevox || voicevox.status.value != VoicevoxEngine.Status.Ready) {
+            system.speak(kana, rate)
             return
         }
-        val result = engineInstance.setLanguage(Locale.JAPAN)
-        Log.i(TAG, "TTS ready engine=${engineInstance.defaultEngine} requested=$engine setLanguage=$result")
-        _state.value = if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
-            State.MissingVoice
-        } else {
-            State.Ready
+        job = scope.launch {
+            runCatching {
+                val spellings = written?.takeIf { it.isNotBlank() && it != kana }?.let(::listOf)
+                    ?: spellingsFor(kana)
+                play(voicevox.wav(kana, spellings, rate))
+            }.onFailure {
+                if (it is kotlinx.coroutines.CancellationException) throw it
+                Log.w(TAG, "VOICEVOX failed for $kana, using system TTS", it)
+                system.speak(kana, rate)
+            }
         }
-        engineInstance.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-            override fun onStart(utteranceId: String?) = Unit
-            override fun onDone(utteranceId: String?) {
-                Log.i(TAG, "Utterance done: $utteranceId")
-            }
-            @Deprecated("Deprecated in Java")
-            override fun onError(utteranceId: String?) {
-                Log.w(TAG, "Utterance error: $utteranceId")
-            }
-        })
     }
 
-    /** Speaks [text] (pass the kana reading so kanji are never mis-read). */
-    fun speak(text: String, rate: Float = 0.9f) {
-        val engineInstance = tts ?: return
-        if (text.isBlank()) return
-        engineInstance.setSpeechRate(rate)
-        engineInstance.speak(text, TextToSpeech.QUEUE_FLUSH, null, "utt-${System.nanoTime()}")
+    private fun play(file: File) {
+        stopPlayer()
+        player = MediaPlayer().apply {
+            setAudioAttributes(
+                AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build(),
+            )
+            setDataSource(file.path)
+            setOnCompletionListener { it.release(); if (player === it) player = null }
+            prepare()
+            start()
+        }
     }
 
-    fun shutdown() {
-        tts?.shutdown()
-        tts = null
+    private fun stopPlayer() {
+        player?.runCatching { stop(); release() }
+        player = null
     }
 
     private companion object {
         const val TAG = "Speaker"
-        const val GOOGLE_ENGINE = "com.google.android.tts"
     }
 }

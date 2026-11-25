@@ -15,11 +15,11 @@ class AppContainer(context: Context) {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     val auth = AuthRepository()
-    val speaker = Speaker(context)
     val cards = CardRepository(auth)
     val settingsRepo = SettingsRepository(context)
     val dictionary = Dictionary(context)
     val llm = LlmClient()
+    val speaker = Speaker(context, scope) { kana -> dictionarySpellings(kana) }
 
     val words = cards.words.stateIn(scope, SharingStarted.Eagerly, emptyList())
     val kanaProgress = cards.kanaProgress.stateIn(scope, SharingStarted.Eagerly, emptyMap())
@@ -56,7 +56,20 @@ class AppContainer(context: Context) {
         }
     }
 
+    /** Kanji spellings of an exact dictionary match, most common first (for VOICEVOX's pitch accent). */
+    private suspend fun dictionarySpellings(kana: String): List<String> = runCatching {
+        val hira = com.kevin77688.jpflashcard.domain.Romaji.toHiragana(kana)
+        dictionary.search(kana, limit = 10)
+            .filter { com.kevin77688.jpflashcard.domain.Romaji.toHiragana(it.reading) == hira }
+            .mapNotNull { it.kanji }
+            .distinct()
+            .take(2)
+    }.getOrDefault(emptyList())
+
     init {
+        scope.launch {
+            settings.collect { speaker.useVoicevox = it.useVoicevox }
+        }
         scope.launch {
             runCatching { dictionary.prepare() }.onFailure { android.util.Log.e("AppContainer", "Dictionary unpack failed", it) }
         }

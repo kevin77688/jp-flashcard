@@ -7,6 +7,7 @@
 需要 JDK 17 與 Android SDK（compileSdk 37.2）。
 
 ```bash
+./tools/fetch_voicevox.sh   # 第一次建置前：下載 VOICEVOX 語音引擎（約 110 MB，不放進 git）
 export JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home
 ./gradlew assembleDebug testDebugUnitTest
 adb install -r app/build/outputs/apk/debug/app-debug.apk
@@ -21,6 +22,12 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 - `ui/`：Jetpack Compose 畫面；寬度 ≥ 600dp 時改用側邊導覽與雙欄版面
 
 Firestore 資料都放在 `/users/{uid}/…`，規則見 `firebase/firestore.rules`。
+
+## 發音
+
+預設用 [VOICEVOX](https://voicevox.hiroshiba.jp/)（神經網路語音，聲音：四国めたん），在手機上離線合成，Open JTalk 詞典提供重音，所以單字的高低音比系統語音準。有漢字的單字用漢字合成，確認讀音一致才採用；只有假名的單字會先查詞典的漢字寫法來取得重音。合成過的單字會快取。設定裡可以隨時切回系統語音。
+
+聲音使用規約要求標示「VOICEVOX:四国めたん」（顯示在設定 → 關於）。
 
 ## 詞典
 

@@ -11,6 +11,8 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        // VOICEVOX's Android library, downloaded by tools/fetch_voicevox.sh.
+        maven { url = uri("third_party/voicevox/maven") }
     }
 }
 

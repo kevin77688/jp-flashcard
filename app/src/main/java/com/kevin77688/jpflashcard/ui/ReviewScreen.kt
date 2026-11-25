@@ -87,10 +87,12 @@ private sealed interface ReviewItem {
     val key: String
     val srs: SrsState
     val speech: String
+    val written: String? get() = null
 
     data class Word(val card: WordCard, override val srs: SrsState) : ReviewItem {
         override val key get() = "w-${card.id}"
         override val speech get() = card.kana
+        override val written get() = card.kanji
     }
 
     data class KanaCard(val sound: KanaSound, val script: KanaScript, override val srs: SrsState) : ReviewItem {
@@ -200,11 +202,11 @@ fun ReviewScreen(deck: String, onClose: () -> Unit) {
     LaunchedEffect(current?.key, index, mode) {
         if (current == null) return@LaunchedEffect
         if (mode == ReviewMode.LISTENING || confusableDeck || (speakOnFront && settings.autoPlay)) {
-            container.speaker.speak(current.speech, settings.speechRate)
+            container.speaker.speak(current.speech, settings.speechRate, current.written)
         }
     }
     LaunchedEffect(flipped) {
-        if (flipped && current != null && !speakOnFront && settings.autoPlay) container.speaker.speak(current.speech, settings.speechRate)
+        if (flipped && current != null && !speakOnFront && settings.autoPlay) container.speaker.speak(current.speech, settings.speechRate, current.written)
     }
 
     fun rate(rating: Int) {
@@ -268,7 +270,7 @@ fun ReviewScreen(deck: String, onClose: () -> Unit) {
                         showSpeakOnFront = speakOnFront,
                         soundPrompt = confusableDeck,
                         onFlip = { if (choice == null || picked != null) flipped = !flipped },
-                        onSpeak = { container.speaker.speak(current.speech, settings.speechRate) },
+                        onSpeak = { container.speaker.speak(current.speech, settings.speechRate, current.written) },
                         modifier = Modifier.weight(1f).fillMaxWidth(),
                     )
                     when {

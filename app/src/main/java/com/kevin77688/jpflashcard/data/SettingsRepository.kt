@@ -19,6 +19,8 @@ data class Settings(
     val llmApiKey: String = "",
     val llmModel: String = "",
     val reviewMode: ReviewMode = ReviewMode.JP_TO_MEANING,
+    /** true: VOICEVOX neural voice; false: the system's text-to-speech. */
+    val useVoicevox: Boolean = true,
 ) {
     val llmConfigured: Boolean get() = llmBaseUrl.isNotBlank() && llmApiKey.isNotBlank() && llmModel.isNotBlank()
 }
@@ -35,6 +37,7 @@ class SettingsRepository(private val context: Context) {
         val llmApiKey = stringPreferencesKey("llm_api_key")
         val llmModel = stringPreferencesKey("llm_model")
         val reviewMode = stringPreferencesKey("review_mode")
+        val useVoicevox = booleanPreferencesKey("use_voicevox")
     }
 
     private fun read(p: Preferences) = Settings(
@@ -45,6 +48,7 @@ class SettingsRepository(private val context: Context) {
         llmApiKey = p[Keys.llmApiKey].orEmpty(),
         llmModel = p[Keys.llmModel].orEmpty(),
         reviewMode = ReviewMode.entries.firstOrNull { it.name == p[Keys.reviewMode] } ?: ReviewMode.JP_TO_MEANING,
+        useVoicevox = p[Keys.useVoicevox] ?: true,
     )
 
     val settings: Flow<Settings> = context.dataStore.data.map(::read)
@@ -60,6 +64,7 @@ class SettingsRepository(private val context: Context) {
             p.write(Keys.llmApiKey, next.llmApiKey.trim())
             p.write(Keys.llmModel, next.llmModel.trim())
             p.write(Keys.reviewMode, next.reviewMode.name)
+            p.write(Keys.useVoicevox, next.useVoicevox)
         }
     }
 

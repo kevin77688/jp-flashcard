@@ -40,6 +40,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -58,7 +61,8 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.kevin77688.jpflashcard.data.Settings
-import com.kevin77688.jpflashcard.data.Speaker
+import com.kevin77688.jpflashcard.data.SystemTts
+import com.kevin77688.jpflashcard.data.VoicevoxEngine
 import kotlinx.coroutines.launch
 
 @Composable
@@ -66,7 +70,8 @@ fun SettingsScreen() {
     val container = LocalContainer.current
     val settings by container.settings.collectAsState()
     val user by container.auth.userFlow.collectAsState(initial = container.auth.currentUser)
-    val tts by container.speaker.state.collectAsState()
+    val tts by container.speaker.system.state.collectAsState()
+    val voicevox by container.speaker.voicevox.status.collectAsState()
     val scope = rememberCoroutineScope()
     val activity = LocalContext.current as ComponentActivity
     val wide = LocalIsWide.current
@@ -100,6 +105,29 @@ fun SettingsScreen() {
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 ToggleRow("全部只顯示假名", "暫時不看漢字（每個單字的個別設定會保留）", settings.kanaOnly) { v -> update { it.copy(kanaOnly = v) } }
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                if (container.speaker.voicevox.bundled) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("發音引擎", style = MaterialTheme.typography.titleSmall)
+                        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                            SegmentedButton(
+                                selected = settings.useVoicevox,
+                                onClick = { update { it.copy(useVoicevox = true) } },
+                                shape = SegmentedButtonDefaults.itemShape(0, 2),
+                            ) { Text("VOICEVOX") }
+                            SegmentedButton(
+                                selected = !settings.useVoicevox,
+                                onClick = { update { it.copy(useVoicevox = false) } },
+                                shape = SegmentedButtonDefaults.itemShape(1, 2),
+                            ) { Text("系統語音") }
+                        }
+                        Text(
+                            "VOICEVOX 是神經網路語音，在手機上離線合成，並用詞典的重音資料，單字的高低音比較準；不滿意可以隨時切回系統語音。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                }
                 Column {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("語速", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
@@ -114,14 +142,17 @@ fun SettingsScreen() {
                         steps = 7,
                     )
                     Text(
-                        when (tts) {
-                            Speaker.State.Ready -> "語音引擎：已就緒（日文）"
-                            Speaker.State.MissingVoice -> "語音引擎缺少日文語音，請到系統設定安裝 Google 文字轉語音的日文語音包"
-                            Speaker.State.Unavailable -> "找不到可用的語音引擎"
-                            Speaker.State.Initializing -> "語音引擎啟動中…"
+                        when {
+                            settings.useVoicevox && voicevox == VoicevoxEngine.Status.Ready -> "VOICEVOX 已就緒"
+                            settings.useVoicevox && voicevox == VoicevoxEngine.Status.Preparing -> "VOICEVOX 第一次啟動，正在解開語音檔（約 10–30 秒），這段期間先用系統語音"
+                            settings.useVoicevox && voicevox == VoicevoxEngine.Status.Failed -> "VOICEVOX 啟動失敗，暫時改用系統語音"
+                            tts == SystemTts.State.Ready -> "系統語音：已就緒（日文）"
+                            tts == SystemTts.State.MissingVoice -> "系統語音缺少日文語音，請到系統設定安裝 Google 文字轉語音的日文語音包"
+                            tts == SystemTts.State.Unavailable -> "找不到可用的語音引擎"
+                            else -> "語音引擎啟動中…"
                         },
                         style = MaterialTheme.typography.bodySmall,
-                        color = if (tts == Speaker.State.Ready) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
+                        color = if (voicevox == VoicevoxEngine.Status.Failed || (!settings.useVoicevox && tts != SystemTts.State.Ready && tts != SystemTts.State.Initializing)) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
@@ -135,7 +166,8 @@ fun SettingsScreen() {
             Group("關於") {
                 Text("日語字卡 0.1.0", style = MaterialTheme.typography.titleSmall)
                 Text(
-                    "詞典資料來自 JMdict（© Electronic Dictionary Research and Development Group，CC BY-SA 4.0），經 jmdict-simplified 轉換。",
+                    "詞典資料來自 JMdict（© Electronic Dictionary Research and Development Group，CC BY-SA 4.0），經 jmdict-simplified 轉換。\n" +
+                        "發音：${VoicevoxEngine.CREDIT}（VOICEVOX 音聲合成引擎，Open JTalk 詞典）。",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
