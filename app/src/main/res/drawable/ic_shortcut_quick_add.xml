@@ -1,0 +1,5 @@
+<!-- Launcher shortcut icon: vermilion circle with the quick-add glyph. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item><shape android:shape="oval"><solid android:color="@color/shu" /></shape></item>
+    <item android:drawable="@drawable/ic_quick_add" android:left="12dp" android:top="12dp" android:right="12dp" android:bottom="12dp" />
+</layer-list>

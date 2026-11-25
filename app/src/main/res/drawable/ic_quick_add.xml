@@ -1,0 +1,6 @@
+<!-- Tile icon (white, tinted by the system): a card with a plus. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
+    <path android:fillColor="#FFFFFFFF"
+        android:pathData="M5,3h11a2,2 0,0 1,2 2v6.1a6,6 0,0 0,-2 -0.1V5H5v14h6.3a6,6 0,0 0,0.9 2H5a2,2 0,0 1,-2 -2V5a2,2 0,0 1,2 -2zM7,8h7v2H7zM7,12h4v2H7zM17,13h2v3h3v2h-3v3h-2v-3h-3v-2h3z" />
+</vector>

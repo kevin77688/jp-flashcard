@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">日語字卡</string>
+    <string name="quick_add">記單字</string>
+    <string name="quick_add_long">快速記一個單字</string>
 </resources>

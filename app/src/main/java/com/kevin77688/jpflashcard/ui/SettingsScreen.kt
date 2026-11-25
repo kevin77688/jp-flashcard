@@ -128,6 +128,8 @@ fun SettingsScreen() {
 
             LlmGroup(settings) { f -> update(f) }
 
+            QuickAddGroup()
+
             DataGroup()
 
             Group("關於") {
@@ -300,6 +302,49 @@ private fun DataGroup() {
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             FilledTonalButton(onClick = { exporter.launch("jp-flashcard-words.csv") }, enabled = words.isNotEmpty(), shape = RoundedCornerShape(12.dp)) { Text("匯出 CSV") }
             OutlinedButton(onClick = { importer.launch(arrayOf("text/*", "application/csv", "application/vnd.ms-excel")) }, shape = RoundedCornerShape(12.dp)) { Text("匯入 CSV") }
+        }
+        message?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary) }
+    }
+}
+
+/** Explains the two ways to open the floating quick-add window, and offers to add the QS tile. */
+@Composable
+private fun QuickAddGroup() {
+    val context = LocalContext.current
+    var message by remember { mutableStateOf<String?>(null) }
+    Group("懸浮記單字") {
+        Text(
+            "在 Duolingo 遇到生字時，不用切換 App：從螢幕頂端往下滑，點快速設定裡的「記單字」，或長按日語字卡圖示選「記單字」，就會在目前畫面上開一個小視窗，存好自動回到原本的 App。",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            if (android.os.Build.VERSION.SDK_INT >= 33) {
+                FilledTonalButton(
+                    onClick = {
+                        val sbm = context.getSystemService(android.app.StatusBarManager::class.java)
+                        sbm.requestAddTileService(
+                            android.content.ComponentName(context, com.kevin77688.jpflashcard.QuickAddTileService::class.java),
+                            "記單字",
+                            android.graphics.drawable.Icon.createWithResource(context, com.kevin77688.jpflashcard.R.drawable.ic_quick_add),
+                            context.mainExecutor,
+                        ) { result ->
+                            message = when (result) {
+                                android.app.StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ADDED -> "已加入快速設定"
+                                android.app.StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ALREADY_ADDED -> "快速設定裡已經有了"
+                                else -> null
+                            }
+                        }
+                    },
+                    shape = RoundedCornerShape(12.dp),
+                ) { Text("加到快速設定") }
+            }
+            OutlinedButton(
+                onClick = {
+                    context.startActivity(android.content.Intent(context, com.kevin77688.jpflashcard.QuickAddActivity::class.java))
+                },
+                shape = RoundedCornerShape(12.dp),
+            ) { Text("試開小視窗") }
         }
         message?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary) }
     }
