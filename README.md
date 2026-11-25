@@ -27,11 +27,13 @@ Firestore 資料都放在 `/users/{uid}/…`，規則見 `firebase/firestore.rul
 
 `web/` 是在 Mac 上新增、修改、刪除單字的網頁，直接讀寫同一份 Firestore 資料，平板和手機幾秒內就會更新。只改內容欄位，不會動到複習進度。
 
+網址：<https://kevin77688.github.io/jp-flashcard/>。推送 `web/` 的變更後，GitHub Actions（`.github/workflows/pages.yml`）會自動重新部署。本機測試：
+
 ```bash
-./tools/web.sh   # 開在 http://localhost:5173（Google 登入只允許 localhost 和 Firebase 網域）
+./tools/web.sh   # 開在 http://localhost:5173
 ```
 
-`web/firebase-config.js` 同樣不在 repo 裡，請照 `web/firebase-config.example.js`，從 Firebase 主控台的網頁應用程式設定填入。
+`web/firebase-config.js` 裡的值本來就是公開的（只是指出要連哪個 Firebase 專案）。資料的保護靠 `firebase/firestore.rules`：只有擁有者的帳號能讀寫，其他人就算用 Google 登入也什麼都看不到、存不進去。Google 登入只允許 Firebase 主控台「已授權網域」裡的網址（localhost、kevin77688.github.io、Firebase 網域）。
 
 ## 發音
 

@@ -1,9 +1,17 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Every user's data lives under /users/{uid}/... and only that signed-in user can touch it.
+    // Personal app: only the owner's account may read or write, and only under its own /users/{uid}.
+    // Anyone else who signs in (e.g. through the public web page) gets nothing and cannot store data.
+    // The UID is an opaque Firebase account id, not personal information.
+    function isOwner(uid) {
+      return request.auth != null
+        && request.auth.uid == uid
+        && uid == 'SFwV6DvGIXeWsfdWeExUIJpqUPC2';
+    }
+
     match /users/{uid}/{document=**} {
-      allow read, write: if request.auth != null && request.auth.uid == uid;
+      allow read, write: if isOwner(uid);
     }
   }
 }

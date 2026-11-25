@@ -31,5 +31,3 @@ google-services.json
 /app/src/main/jniLibs/
 /app/src/main/assets/voicevox/
 
-# Firebase web config (same reason as google-services.json)
-/web/firebase-config.js
