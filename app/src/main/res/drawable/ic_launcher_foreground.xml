@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Two stacked flashcards; the front card carries a red "sun" dot. Safe zone is the centre 66dp. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:pivotX="54"
+        android:pivotY="54"
+        android:rotation="-10">
+        <path
+            android:fillAlpha="0.55"
+            android:fillColor="#FFF7F3EC"
+            android:pathData="M38,30h34a5,5 0,0 1,5 5v40a5,5 0,0 1,-5 5h-34a5,5 0,0 1,-5 -5v-40a5,5 0,0 1,5 -5z" />
+    </group>
+    <group
+        android:pivotX="54"
+        android:pivotY="54"
+        android:rotation="6">
+        <path
+            android:fillColor="#FFF7F3EC"
+            android:pathData="M38,30h34a5,5 0,0 1,5 5v40a5,5 0,0 1,-5 5h-34a5,5 0,0 1,-5 -5v-40a5,5 0,0 1,5 -5z" />
+        <path
+            android:fillColor="#FFD2452D"
+            android:pathData="M55,49m-9,0a9,9 0,1 1,18 0a9,9 0,1 1,-18 0" />
+        <path
+            android:fillColor="#FF1E1B18"
+            android:pathData="M44,66h22a2,2 0,0 1,0 4h-22a2,2 0,0 1,0 -4z" />
+    </group>
+</vector>
