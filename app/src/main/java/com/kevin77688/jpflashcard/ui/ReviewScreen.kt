@@ -1,5 +1,20 @@
 package com.kevin77688.jpflashcard.ui
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.automirrored.rounded.VolumeUp
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.text.style.TextOverflow
+import com.kevin77688.jpflashcard.domain.ReviewMode
+import com.kevin77688.jpflashcard.domain.Romaji
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -86,16 +101,25 @@ private sealed interface ReviewItem {
 
 private val ratingLabels = listOf("忘了", "模糊", "想一下", "記得", "秒答")
 
+/** The meaning shown on a word card: Chinese if there is one, otherwise the first English gloss. */
+private fun WordCard.shownMeaning(): String = meaning.ifBlank { meaningEn.lineSequence().firstOrNull().orEmpty() }
+
+private fun isKatakana(text: String) = text.all { it in '゠'..'ヿ' }
+
 private fun buildDeck(deck: String, c: AppContainer, now: Long): List<ReviewItem> {
     val words = c.words.value
+    val progress = c.kanaProgress.value
     return when {
         deck == "words" -> words.filter { it.srs.due <= now }.sortedBy { it.srs.due }.map { ReviewItem.Word(it, it.srs) }
         deck == "words-all" -> words.shuffled().map { ReviewItem.Word(it, it.srs) }
+        deck == CONFUSABLE_DECK -> Kana.confusables.flatMap { listOf(it.first, it.second) }.distinct().mapNotNull { glyph ->
+            val script = if (isKatakana(glyph)) KanaScript.KATAKANA else KanaScript.HIRAGANA
+            Kana.all.firstOrNull { it.text(script) == glyph }?.let { ReviewItem.KanaCard(it, script, progress[it.cardId(script)] ?: SrsState()) }
+        }.shuffled().take(20)
         deck.startsWith("kana:") -> {
             val (_, prefix, groupName) = deck.split(":")
             val script = KanaScript.entries.first { it.prefix == prefix }
             val sounds = if (groupName == "ALL") Kana.all else Kana.sounds(KanaGroup.valueOf(groupName))
-            val progress = c.kanaProgress.value
             val items = sounds.map { ReviewItem.KanaCard(it, script, progress[it.cardId(script)] ?: SrsState()) }
             val due = items.filter { !it.srs.isNew && it.srs.due <= now }.sortedBy { it.srs.due }
             val fresh = items.filter { it.srs.isNew }
@@ -107,21 +131,80 @@ private fun buildDeck(deck: String, c: AppContainer, now: Long): List<ReviewItem
     }
 }
 
+/** A multiple-choice question. [japanese] says whether the options are kana/words (styled as Japanese). */
+private data class Choice(val options: List<String>, val answer: Int, val japanese: Boolean)
+
+private fun buildChoice(item: ReviewItem, words: List<WordCard>, confusableDeck: Boolean): Choice? {
+    val (right, pool, japanese) = when (item) {
+        is ReviewItem.Word -> Triple(
+            item.card.shownMeaning(),
+            words.filter { it.id != item.card.id }.map { it.shownMeaning() },
+            false,
+        )
+        is ReviewItem.KanaCard -> {
+            val glyph = item.sound.text(item.script)
+            val twins = Kana.confusables.filter { it.first == glyph || it.second == glyph }
+                .map { if (it.first == glyph) it.second else it.first }
+            val sameGroup = Kana.sounds(item.sound.group).filter { it != item.sound }.shuffled()
+            if (confusableDeck) {
+                // Hear it, then pick the right glyph out of its look-alikes.
+                Triple(glyph, twins + sameGroup.map { it.text(item.script) }, true)
+            } else {
+                val twinRomaji = twins.mapNotNull { t -> Kana.all.firstOrNull { it.hiragana == Romaji.toHiragana(t) }?.romaji }
+                Triple(item.sound.romaji, twinRomaji + sameGroup.map { it.romaji }, false)
+            }
+        }
+    }
+    if (right.isBlank()) return null
+    // Look-alikes come first in the pool, so they always make it into the four options.
+    val distractors = pool.filter { it.isNotBlank() && it != right }.distinct().let { all ->
+        val priority = all.take(if (item is ReviewItem.KanaCard) 2 else 0)
+        (priority + (all - priority.toSet()).shuffled()).take(3)
+    }
+    if (distractors.isEmpty()) return null
+    val options = (distractors + right).shuffled()
+    return Choice(options, options.indexOf(right), japanese)
+}
+
+const val CONFUSABLE_DECK = "confusable"
+
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ReviewScreen(deck: String, onClose: () -> Unit) {
     val container = LocalContainer.current
     val settings by container.settings.collectAsState()
+    val scope = rememberCoroutineScope()
     val queue = remember(deck) { mutableStateListOf<ReviewItem>().apply { addAll(buildDeck(deck, container, System.currentTimeMillis())) } }
     val initialSize = remember(deck) { queue.size }
     var index by remember(deck) { mutableIntStateOf(0) }
     var flipped by remember(deck) { mutableStateOf(false) }
+    var picked by remember(deck) { mutableStateOf<Int?>(null) }
     val tally = remember(deck) { mutableStateListOf(0, 0, 0, 0, 0) }
     val reviewed = remember(deck) { mutableStateOf(0) }
     val wide = LocalIsWide.current
     val current = queue.getOrNull(index)
+    val confusableDeck = deck == CONFUSABLE_DECK
+    val mode = if (confusableDeck) ReviewMode.CHOICE else settings.reviewMode
+    val choice = remember(current?.key, index, mode) {
+        if (mode == ReviewMode.CHOICE && current != null) buildChoice(current, container.words.value, confusableDeck) else null
+    }
 
-    LaunchedEffect(current?.key, index) {
-        if (current != null && settings.autoPlay) container.speaker.speak(current.speech, settings.speechRate)
+    // Speaking on the front must not give the answer away: a kana's sound *is* its answer,
+    // and in 意→日 the reading is the answer too.
+    val speakOnFront = current != null && when {
+        mode == ReviewMode.LISTENING || confusableDeck -> true
+        mode == ReviewMode.MEANING_TO_JP -> false
+        else -> current is ReviewItem.Word
+    }
+
+    LaunchedEffect(current?.key, index, mode) {
+        if (current == null) return@LaunchedEffect
+        if (mode == ReviewMode.LISTENING || confusableDeck || (speakOnFront && settings.autoPlay)) {
+            container.speaker.speak(current.speech, settings.speechRate)
+        }
+    }
+    LaunchedEffect(flipped) {
+        if (flipped && current != null && !speakOnFront && settings.autoPlay) container.speaker.speak(current.speech, settings.speechRate)
     }
 
     fun rate(rating: Int) {
@@ -143,13 +226,14 @@ fun ReviewScreen(deck: String, onClose: () -> Unit) {
             queue.add(minOf(index + 4, queue.size), again)
         }
         flipped = false
+        picked = null
         index += 1
     }
 
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).safeDrawingPadding(), contentAlignment = Alignment.TopCenter) {
         Column(
             Modifier.widthIn(max = 760.dp).fillMaxSize().padding(horizontal = if (wide) 32.dp else 16.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = onClose) { Icon(Icons.Rounded.Close, "結束") }
@@ -163,6 +247,14 @@ fun ReviewScreen(deck: String, onClose: () -> Unit) {
                 Spacer(Modifier.width(12.dp))
                 Text("${minOf(index + 1, queue.size)} / ${queue.size}", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
+            if (confusableDeck) {
+                Text("易混字：聽發音，選出正確的字", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            } else if (initialSize > 0 && current != null) {
+                ModeSelector(mode) { m ->
+                    flipped = false; picked = null
+                    scope.launch { container.settingsRepo.update { it.copy(reviewMode = m) } }
+                }
+            }
 
             when {
                 initialSize == 0 -> EmptyState(onClose)
@@ -170,16 +262,25 @@ fun ReviewScreen(deck: String, onClose: () -> Unit) {
                 else -> {
                     FlipCard(
                         item = current,
+                        mode = mode,
                         flipped = flipped,
                         kanaOnly = settings.kanaOnly,
-                        onFlip = { flipped = !flipped },
+                        showSpeakOnFront = speakOnFront,
+                        soundPrompt = confusableDeck,
+                        onFlip = { if (choice == null || picked != null) flipped = !flipped },
                         onSpeak = { container.speaker.speak(current.speech, settings.speechRate) },
                         modifier = Modifier.weight(1f).fillMaxWidth(),
                     )
-                    if (flipped) {
-                        RatingBar(current.srs, ::rate)
-                    } else {
-                        Button(
+                    when {
+                        choice != null && !flipped -> ChoiceGrid(choice, picked) { i ->
+                            picked = i
+                            scope.launch { delay(650); flipped = true }
+                        }
+                        flipped -> {
+                            if (choice != null && picked != null) ChoiceResult(choice, picked!!)
+                            RatingBar(current.srs, ::rate)
+                        }
+                        else -> Button(
                             onClick = { flipped = true },
                             modifier = Modifier.fillMaxWidth().height(64.dp),
                             shape = RoundedCornerShape(18.dp),
@@ -192,10 +293,83 @@ fun ReviewScreen(deck: String, onClose: () -> Unit) {
 }
 
 @Composable
+private fun ModeSelector(mode: ReviewMode, onChange: (ReviewMode) -> Unit) {
+    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+        ReviewMode.entries.forEachIndexed { i, m ->
+            SegmentedButton(
+                selected = mode == m,
+                onClick = { onChange(m) },
+                shape = SegmentedButtonDefaults.itemShape(i, ReviewMode.entries.size),
+                icon = {},
+            ) { Text(m.label, maxLines = 1) }
+        }
+    }
+}
+
+@Composable
+private fun ChoiceGrid(choice: Choice, picked: Int?, onPick: (Int) -> Unit) {
+    val good = MaterialTheme.colorScheme.tertiary
+    val bad = MaterialTheme.colorScheme.error
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        choice.options.chunked(2).forEachIndexed { row, pair ->
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.height(if (choice.japanese) 76.dp else 68.dp)) {
+                pair.forEachIndexed { col, text ->
+                    val i = row * 2 + col
+                    val tint = when {
+                        picked == null -> null
+                        i == choice.answer -> good
+                        i == picked -> bad
+                        else -> null
+                    }
+                    OutlinedButton(
+                        onClick = { if (picked == null) onPick(i) },
+                        modifier = Modifier.weight(1f).fillMaxHeight(),
+                        shape = RoundedCornerShape(18.dp),
+                        border = BorderStroke(if (tint != null) 2.dp else 1.dp, tint ?: MaterialTheme.colorScheme.outlineVariant),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            containerColor = tint?.copy(alpha = 0.14f) ?: MaterialTheme.colorScheme.surfaceContainerLowest,
+                            contentColor = MaterialTheme.colorScheme.onSurface,
+                        ),
+                    ) {
+                        Text(
+                            text,
+                            style = if (choice.japanese) JaText.title.copy(fontSize = 32.sp) else MaterialTheme.typography.titleMedium,
+                            textAlign = TextAlign.Center,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ChoiceResult(choice: Choice, picked: Int) {
+    val right = picked == choice.answer
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = (if (right) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.error).copy(alpha = 0.14f),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Text(
+            if (right) "答對了！依照你的把握程度評分" else "選了「${choice.options[picked]}」，正確答案是「${choice.options[choice.answer]}」",
+            style = MaterialTheme.typography.titleSmall,
+            color = if (right) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.error,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+        )
+    }
+}
+
+@Composable
 private fun FlipCard(
     item: ReviewItem,
+    mode: ReviewMode,
     flipped: Boolean,
     kanaOnly: Boolean,
+    showSpeakOnFront: Boolean,
+    soundPrompt: Boolean,
     onFlip: () -> Unit,
     onSpeak: () -> Unit,
     modifier: Modifier,
@@ -218,28 +392,75 @@ private fun FlipCard(
         ) {
             // Washi accent strip along the top edge.
             Box(Modifier.fillMaxWidth().height(6.dp).background(MaterialTheme.colorScheme.primary.copy(alpha = if (showBack) 0.25f else 0.9f)))
-            if (showBack) CardBack(item, onSpeak) else CardFront(item, kanaOnly)
-            SpeakButton(onSpeak, Modifier.align(Alignment.TopEnd).padding(16.dp))
+            if (showBack) CardBack(item, onSpeak) else CardFront(item, mode, kanaOnly, soundPrompt, onSpeak)
+            if (showBack || (showSpeakOnFront && mode != ReviewMode.LISTENING)) {
+                SpeakButton(onSpeak, Modifier.align(Alignment.TopEnd).padding(16.dp))
+            }
         }
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun CardFront(item: ReviewItem, kanaOnly: Boolean) {
+private fun CardFront(item: ReviewItem, mode: ReviewMode, kanaOnly: Boolean, soundPrompt: Boolean, onSpeak: () -> Unit) {
     Column(
         Modifier.fillMaxSize().padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        when (item) {
-            is ReviewItem.Word -> WordText(
-                item.card.kanji, item.card.kana, item.card.effectiveDisplay(kanaOnly),
-                JaText.display.copy(fontSize = if (item.card.written.length > 5) 48.sp else 64.sp),
-            )
-            is ReviewItem.KanaCard -> Text(item.sound.text(item.script), style = JaText.display.copy(fontSize = 120.sp))
+        val hint = when {
+            // 易混字: the glyph is the answer, so the prompt is only its sound and romaji.
+            soundPrompt && item is ReviewItem.KanaCard -> {
+                Text(item.sound.romaji, style = MaterialTheme.typography.displayLarge.copy(fontWeight = FontWeight.SemiBold), color = MaterialTheme.colorScheme.primary)
+                Text(if (item.script == KanaScript.HIRAGANA) "平假名" else "片假名", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                "哪一個才是這個音？"
+            }
+            mode == ReviewMode.LISTENING -> {
+                // Only the sound: a big replay button instead of any text.
+                FilledTonalIconButton(onClick = onSpeak, modifier = Modifier.size(120.dp)) {
+                    Icon(Icons.AutoMirrored.Rounded.VolumeUp, "再聽一次", Modifier.size(56.dp))
+                }
+                "聽聽看，想一想是哪個字；點卡片翻面"
+            }
+            mode == ReviewMode.MEANING_TO_JP -> when (item) {
+                is ReviewItem.Word -> {
+                    Text(
+                        item.card.shownMeaning().ifBlank { "（還沒有意思，先看讀音）" },
+                        style = MaterialTheme.typography.displaySmall.copy(fontWeight = FontWeight.SemiBold),
+                        textAlign = TextAlign.Center,
+                    )
+                    if (item.card.pos.isNotEmpty()) {
+                        Spacer(Modifier.height(12.dp))
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally)) {
+                            item.card.pos.mapNotNull(::posLabel).distinct().take(3).forEach { Pill(it) }
+                        }
+                    }
+                    "日文怎麼說？想好再點卡片翻面"
+                }
+                is ReviewItem.KanaCard -> {
+                    Text(item.sound.romaji, style = MaterialTheme.typography.displayLarge.copy(fontWeight = FontWeight.SemiBold), color = MaterialTheme.colorScheme.primary)
+                    Text(if (item.script == KanaScript.HIRAGANA) "平假名" else "片假名", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    "寫得出來嗎？想好再點卡片翻面"
+                }
+            }
+            else -> {
+                when (item) {
+                    is ReviewItem.Word -> WordText(
+                        item.card.kanji, item.card.kana, item.card.effectiveDisplay(kanaOnly),
+                        JaText.display.copy(fontSize = if (item.card.written.length > 5) 48.sp else 64.sp),
+                    )
+                    is ReviewItem.KanaCard -> Text(item.sound.text(item.script), style = JaText.display.copy(fontSize = 120.sp))
+                }
+                when {
+                    mode == ReviewMode.CHOICE && item is ReviewItem.KanaCard -> "選出正確的讀音"
+                    mode == ReviewMode.CHOICE -> "選出正確的意思"
+                    item is ReviewItem.KanaCard -> "想一想怎麼唸，再點卡片翻面"
+                    else -> "想一想意思，再點卡片翻面"
+                }
+            }
         }
         Spacer(Modifier.height(24.dp))
-        Text(if (item is ReviewItem.KanaCard) "想一想怎麼唸，再點卡片翻面" else "想一想意思，再點卡片翻面", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.outline)
+        Text(hint, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.outline, textAlign = TextAlign.Center)
     }
 }
 

@@ -41,3 +41,11 @@ data class WordDraft(
     val display: DisplayMode = DisplayMode.FURIGANA,
     val note: String = "",
 )
+
+/** How a flashcard session asks the question. The answer side always shows everything. */
+enum class ReviewMode(val label: String, val hint: String) {
+    JP_TO_MEANING("日→意", "看日文想意思"),
+    MEANING_TO_JP("意→日", "看意思想日文"),
+    LISTENING("聽力", "聽發音想是哪個字"),
+    CHOICE("選擇", "四選一"),
+}

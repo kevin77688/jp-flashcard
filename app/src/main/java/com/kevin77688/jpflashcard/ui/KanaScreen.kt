@@ -2,6 +2,8 @@ package com.kevin77688.jpflashcard.ui
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.material.icons.automirrored.rounded.ArrowForward
+import androidx.compose.material3.Surface
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -93,6 +95,22 @@ fun KanaScreen(onPractice: (String) -> Unit) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 KanaGroup.entries.forEach { g ->
                     FilterChip(selected = group == g, onClick = { group = g }, label = { Text(g.label) })
+                }
+            }
+            Surface(
+                onClick = { onPractice(CONFUSABLE_DECK) },
+                shape = RoundedCornerShape(18.dp),
+                color = MaterialTheme.colorScheme.secondaryContainer,
+                contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Row(Modifier.padding(horizontal = 18.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("シ ツ", style = JaText.title, modifier = Modifier.padding(end = 14.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text("易混字練習", style = MaterialTheme.typography.titleSmall)
+                        Text("聽發音，從長得像的字裡選出正確的", style = MaterialTheme.typography.bodySmall)
+                    }
+                    Icon(Icons.AutoMirrored.Rounded.ArrowForward, null)
                 }
             }
             Text(

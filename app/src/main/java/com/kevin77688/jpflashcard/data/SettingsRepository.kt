@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.kevin77688.jpflashcard.domain.ReviewMode
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -17,6 +18,7 @@ data class Settings(
     val llmBaseUrl: String = "",
     val llmApiKey: String = "",
     val llmModel: String = "",
+    val reviewMode: ReviewMode = ReviewMode.JP_TO_MEANING,
 ) {
     val llmConfigured: Boolean get() = llmBaseUrl.isNotBlank() && llmApiKey.isNotBlank() && llmModel.isNotBlank()
 }
@@ -32,29 +34,24 @@ class SettingsRepository(private val context: Context) {
         val llmBaseUrl = stringPreferencesKey("llm_base_url")
         val llmApiKey = stringPreferencesKey("llm_api_key")
         val llmModel = stringPreferencesKey("llm_model")
+        val reviewMode = stringPreferencesKey("review_mode")
     }
 
-    val settings: Flow<Settings> = context.dataStore.data.map { p ->
-        Settings(
-            autoPlay = p[Keys.autoPlay] ?: true,
-            speechRate = p[Keys.speechRate] ?: 0.9f,
-            kanaOnly = p[Keys.kanaOnly] ?: false,
-            llmBaseUrl = p[Keys.llmBaseUrl].orEmpty(),
-            llmApiKey = p[Keys.llmApiKey].orEmpty(),
-            llmModel = p[Keys.llmModel].orEmpty(),
-        )
-    }
+    private fun read(p: Preferences) = Settings(
+        autoPlay = p[Keys.autoPlay] ?: true,
+        speechRate = p[Keys.speechRate] ?: 0.9f,
+        kanaOnly = p[Keys.kanaOnly] ?: false,
+        llmBaseUrl = p[Keys.llmBaseUrl].orEmpty(),
+        llmApiKey = p[Keys.llmApiKey].orEmpty(),
+        llmModel = p[Keys.llmModel].orEmpty(),
+        reviewMode = ReviewMode.entries.firstOrNull { it.name == p[Keys.reviewMode] } ?: ReviewMode.JP_TO_MEANING,
+    )
+
+    val settings: Flow<Settings> = context.dataStore.data.map(::read)
 
     suspend fun update(transform: (Settings) -> Settings) {
         context.dataStore.edit { p ->
-            val current = Settings(
-                autoPlay = p[Keys.autoPlay] ?: true,
-                speechRate = p[Keys.speechRate] ?: 0.9f,
-                kanaOnly = p[Keys.kanaOnly] ?: false,
-                llmBaseUrl = p[Keys.llmBaseUrl].orEmpty(),
-                llmApiKey = p[Keys.llmApiKey].orEmpty(),
-                llmModel = p[Keys.llmModel].orEmpty(),
-            )
+            val current = read(p)
             val next = transform(current)
             p.write(Keys.autoPlay, next.autoPlay)
             p.write(Keys.speechRate, next.speechRate)
@@ -62,6 +59,7 @@ class SettingsRepository(private val context: Context) {
             p.write(Keys.llmBaseUrl, next.llmBaseUrl.trim())
             p.write(Keys.llmApiKey, next.llmApiKey.trim())
             p.write(Keys.llmModel, next.llmModel.trim())
+            p.write(Keys.reviewMode, next.reviewMode.name)
         }
     }
 
