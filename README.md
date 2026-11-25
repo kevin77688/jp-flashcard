@@ -23,6 +23,16 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 Firestore 資料都放在 `/users/{uid}/…`，規則見 `firebase/firestore.rules`。
 
+## Mac 網頁版
+
+`web/` 是在 Mac 上新增、修改、刪除單字的網頁，直接讀寫同一份 Firestore 資料，平板和手機幾秒內就會更新。只改內容欄位，不會動到複習進度。
+
+```bash
+./tools/web.sh   # 開在 http://localhost:5173（Google 登入只允許 localhost 和 Firebase 網域）
+```
+
+`web/firebase-config.js` 同樣不在 repo 裡，請照 `web/firebase-config.example.js`，從 Firebase 主控台的網頁應用程式設定填入。
+
 ## 發音
 
 預設用 [VOICEVOX](https://voicevox.hiroshiba.jp/)（神經網路語音，聲音：四国めたん），在手機上離線合成，Open JTalk 詞典提供重音，所以單字的高低音比系統語音準。有漢字的單字用漢字合成，確認讀音一致才採用；只有假名的單字會先查詞典的漢字寫法來取得重音。合成過的單字會快取。設定裡可以隨時切回系統語音。

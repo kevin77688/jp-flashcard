@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>單字本</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23C8402A'/%3E%3Ctext x='32' y='45' font-size='36' text-anchor='middle' fill='white' font-family='Hiragino Mincho ProN,serif'%3E単%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Signed out -->
+  <section id="signin" class="signin" hidden>
+    <div class="signin-card">
+      <div class="seal big">単</div>
+      <h1>單字本</h1>
+      <p>在 Mac 上整理單字，手機和平板幾秒內就會同步。</p>
+      <button id="signin-btn" class="btn primary wide">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M21.35 11.1H12v2.98h5.35c-.23 1.4-1.66 4.1-5.35 4.1-3.22 0-5.85-2.67-5.85-5.96S8.78 6.26 12 6.26c1.83 0 3.06.78 3.76 1.45l2.56-2.47C16.68 3.71 14.54 2.8 12 2.8 6.92 2.8 2.8 6.92 2.8 12s4.12 9.2 9.2 9.2c5.31 0 8.83-3.73 8.83-8.99 0-.6-.07-1.06-.15-1.51Z"/></svg>
+        用 Google 帳號登入
+      </button>
+      <p id="signin-error" class="error" hidden></p>
+    </div>
+  </section>
+
+  <!-- Signed in -->
+  <div id="app" class="app" hidden>
+    <header class="topbar">
+      <div class="brand">
+        <div class="seal">単</div>
+        <div>
+          <div class="brand-title">單字本</div>
+          <div class="brand-sub" id="stats">—</div>
+        </div>
+      </div>
+      <div class="topbar-right">
+        <button id="sync" class="sync" title="和伺服器的連線狀態">
+          <span class="dot"></span><span id="sync-text">連線中</span>
+        </button>
+        <div class="account">
+          <img id="avatar" alt="" referrerpolicy="no-referrer">
+          <button id="signout" class="btn text small">登出</button>
+        </div>
+      </div>
+    </header>
+
+    <main class="layout">
+      <!-- Editor -->
+      <section class="panel editor" aria-labelledby="editor-title">
+        <div class="panel-head">
+          <h2 id="editor-title">新增單字</h2>
+          <button id="new-btn" class="btn text small" hidden>＋ 改成新增</button>
+        </div>
+
+        <form id="form" autocomplete="off" novalidate>
+          <div class="field">
+            <div class="label-row">
+              <label for="kana">讀音<span class="req">必填</span></label>
+              <div class="seg mini" role="group" aria-label="假名種類">
+                <button type="button" data-script="hira" class="on">ひらがな</button>
+                <button type="button" data-script="kata">カタカナ</button>
+              </div>
+            </div>
+            <input id="kana" class="input jp" lang="ja" spellcheck="false" placeholder="打羅馬拼音，例如 tabemasu">
+            <div class="hint" id="kana-hint">英文字母會自動轉成假名；結尾的 n 請打 nn。</div>
+          </div>
+
+          <div class="field">
+            <label for="kanji">漢字寫法<span class="opt">可不填</span></label>
+            <input id="kanji" class="input jp" lang="ja" spellcheck="false" placeholder="例如 食べます">
+          </div>
+
+          <div class="field">
+            <label for="meaning">中文意思</label>
+            <textarea id="meaning" class="input" rows="2" placeholder="可以留空，之後在平板按「AI 補齊」"></textarea>
+          </div>
+
+          <div class="field">
+            <label for="meaningEn">英文意思<span class="opt">可不填</span></label>
+            <input id="meaningEn" class="input" spellcheck="false" placeholder="to eat">
+          </div>
+
+          <div class="field">
+            <label>卡片上怎麼顯示</label>
+            <div class="seg" id="display" role="radiogroup">
+              <button type="button" data-display="FURIGANA">漢字＋注音</button>
+              <button type="button" data-display="KANJI">只有漢字</button>
+              <button type="button" data-display="KANA">只用假名</button>
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="note">備註<span class="opt">可不填</span></label>
+            <textarea id="note" class="input" rows="2" placeholder="例句、用法、容易搞混的字…"></textarea>
+          </div>
+
+          <div class="preview" aria-live="polite">
+            <div class="preview-label">卡片預覽</div>
+            <div class="preview-word jp" id="pv-word"><span class="placeholder">還沒輸入</span></div>
+            <div class="preview-romaji" id="pv-romaji"></div>
+            <div class="preview-meaning" id="pv-meaning"></div>
+          </div>
+
+          <p id="dup" class="warn" hidden></p>
+          <p id="form-error" class="error" hidden></p>
+
+          <div class="actions">
+            <button id="delete-btn" type="button" class="btn danger" hidden>刪除</button>
+            <div class="spacer"></div>
+            <button id="cancel-btn" type="button" class="btn" hidden>取消</button>
+            <button id="save-btn" type="submit" class="btn primary">新增<kbd>⌘↩</kbd></button>
+          </div>
+        </form>
+      </section>
+
+      <!-- List -->
+      <section class="panel list-panel" aria-label="單字列表">
+        <div class="toolbar">
+          <div class="search">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M10 3a7 7 0 0 1 5.6 11.2l4.6 4.6-1.4 1.4-4.6-4.6A7 7 0 1 1 10 3Zm0 2a5 5 0 1 0 0 10 5 5 0 0 0 0-10Z"/></svg>
+            <input id="search" type="search" placeholder="搜尋假名、漢字、意思或拼音" spellcheck="false">
+            <kbd>/</kbd>
+          </div>
+          <div class="chips" id="filters" role="tablist">
+            <button data-filter="all" class="on">全部 <span></span></button>
+            <button data-filter="due">該複習 <span></span></button>
+            <button data-filter="new">還沒學 <span></span></button>
+            <button data-filter="blank">缺意思 <span></span></button>
+          </div>
+        </div>
+        <ul id="list" class="list"></ul>
+        <div id="empty" class="empty" hidden></div>
+      </section>
+    </main>
+  </div>
+
+  <div id="loading" class="loading"><div class="seal">単</div></div>
+  <div id="toast" class="toast" role="status" hidden><span id="toast-text"></span><button id="toast-action" class="btn text small" hidden></button></div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

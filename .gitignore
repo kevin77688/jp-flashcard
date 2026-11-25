@@ -30,3 +30,6 @@ google-services.json
 /third_party/voicevox/
 /app/src/main/jniLibs/
 /app/src/main/assets/voicevox/
+
+# Firebase web config (same reason as google-services.json)
+/web/firebase-config.js
