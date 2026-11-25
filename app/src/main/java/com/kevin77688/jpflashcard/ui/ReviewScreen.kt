@@ -239,7 +239,7 @@ private fun CardFront(item: ReviewItem, kanaOnly: Boolean) {
             is ReviewItem.KanaCard -> Text(item.sound.text(item.script), style = JaText.display.copy(fontSize = 120.sp))
         }
         Spacer(Modifier.height(24.dp))
-        Text("想一想意思，再點卡片翻面", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.outline)
+        Text(if (item is ReviewItem.KanaCard) "想一想怎麼唸，再點卡片翻面" else "想一想意思，再點卡片翻面", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.outline)
     }
 }
 

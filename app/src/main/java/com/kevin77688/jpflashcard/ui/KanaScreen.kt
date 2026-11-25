@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.width
@@ -68,7 +69,18 @@ fun KanaScreen(onPractice: (String) -> Unit) {
                 .padding(horizontal = if (wide) 40.dp else 16.dp, vertical = 24.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Text("五十音", style = MaterialTheme.typography.headlineMedium)
+            // The practice button lives in the header so it is reachable without scrolling past the grid.
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("五十音", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.weight(1f))
+                Button(
+                    onClick = { onPractice("kana:${script.prefix}:${group.name}") },
+                    shape = RoundedCornerShape(14.dp),
+                ) {
+                    Icon(Icons.Rounded.School, null, Modifier.size(20.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("練習「${script.label}・${group.label}」")
+                }
+            }
             SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
                 KanaScript.entries.forEachIndexed { i, s ->
                     SegmentedButton(
@@ -112,15 +124,6 @@ fun KanaScreen(onPractice: (String) -> Unit) {
                     }
                 }
             }
-            Button(
-                onClick = { onPractice("kana:${script.prefix}:${group.name}") },
-                modifier = Modifier.fillMaxWidth().height(52.dp),
-                shape = RoundedCornerShape(16.dp),
-            ) {
-                Icon(Icons.Rounded.School, null)
-                Spacer(Modifier.width(8.dp))
-                Text("練習「${script.label}・${group.label}」")
-            }
         }
     }
 }
@@ -139,22 +142,29 @@ private fun KanaCell(
         if (highlighted) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLowest,
         label = "cell",
     )
+    // On a phone a cell is only ~60dp wide, so a fixed aspect ratio would clip the romaji;
+    // there the content decides the height instead.
+    val wide = LocalIsWide.current
     Card(
         onClick = onClick,
-        modifier = modifier.aspectRatio(if (youon) 1.35f else 0.9f),
+        modifier = if (wide) modifier.aspectRatio(if (youon) 1.35f else 0.9f) else modifier,
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = container),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
     ) {
         Column(
-            Modifier.fillMaxSize().padding(vertical = 8.dp, horizontal = 6.dp),
+            (if (wide) Modifier.fillMaxSize() else Modifier.fillMaxWidth()).padding(vertical = 8.dp, horizontal = 4.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.SpaceBetween,
+            verticalArrangement = if (wide) Arrangement.SpaceBetween else Arrangement.spacedBy(2.dp),
         ) {
-            Spacer(Modifier.height(2.dp))
-            Text(sound.text(script), style = JaText.title.copy(fontSize = if (youon) 26.sp else 30.sp))
+            if (wide) Spacer(Modifier.height(2.dp))
+            val size = when {
+                youon -> if (wide) 26.sp else 24.sp
+                else -> if (wide) 30.sp else 26.sp
+            }
+            Text(sound.text(script), style = JaText.title.copy(fontSize = size), maxLines = 1)
             Text(sound.romaji, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            MasteryBar(Srs.mastery(state), Modifier.fillMaxWidth(0.6f))
+            MasteryBar(Srs.mastery(state), Modifier.fillMaxWidth(0.6f).padding(top = if (wide) 0.dp else 4.dp))
         }
     }
 }

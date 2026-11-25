@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.width
@@ -118,9 +119,10 @@ fun WordsScreen(onAdd: () -> Unit, onOpen: (String) -> Unit, onReview: (String) 
                         items(filtered, key = { it.id }) { w ->
                             WordRow(w, settings.kanaOnly, onClick = { onOpen(w.id) })
                         }
-                        item { Spacer(Modifier.padding(40.dp)) }
                     }
                 }
+                // Room below the card so the FAB never covers the last word.
+                Spacer(Modifier.height(88.dp))
             }
         }
         ExtendedFloatingActionButton(

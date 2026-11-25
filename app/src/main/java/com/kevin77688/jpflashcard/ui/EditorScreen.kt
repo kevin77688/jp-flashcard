@@ -55,6 +55,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -90,8 +91,9 @@ fun EditorScreen(wordId: String?, onClose: () -> Unit) {
 
     var input by rememberSaveable { mutableStateOf("") }
     var katakana by rememberSaveable { mutableStateOf(false) }
-    var draft by remember { mutableStateOf(WordDraft()) }
-    var loaded by remember { mutableStateOf(wordId == null) }
+    // Saveable so a half-filled card survives rotation, split-screen and process death.
+    var draft by rememberSaveable(stateSaver = WordDraftSaver) { mutableStateOf(WordDraft()) }
+    var loaded by rememberSaveable { mutableStateOf(wordId == null) }
     var candidates by remember { mutableStateOf<List<DictEntry>>(emptyList()) }
     var aiBusy by remember { mutableStateOf(false) }
     var aiError by remember { mutableStateOf<String?>(null) }
@@ -257,6 +259,21 @@ fun EditorScreen(wordId: String?, onClose: () -> Unit) {
         )
     }
 }
+
+private val WordDraftSaver = listSaver<WordDraft, Any>(
+    save = { listOf(it.kanji, it.kana, it.meaning, it.meaningEn, it.pos.joinToString(","), it.display.name, it.note) },
+    restore = {
+        WordDraft(
+            kanji = it[0] as String,
+            kana = it[1] as String,
+            meaning = it[2] as String,
+            meaningEn = it[3] as String,
+            pos = (it[4] as String).split(',').filter(String::isNotBlank),
+            display = DisplayMode.valueOf(it[5] as String),
+            note = it[6] as String,
+        )
+    },
+)
 
 @Composable
 private fun InputSection(
