@@ -3,6 +3,8 @@ package com.kevin77688.jpflashcard.data
 import android.util.Log
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.MetadataChanges
+import com.google.firebase.firestore.Source
 import com.google.firebase.firestore.SetOptions
 import com.kevin77688.jpflashcard.domain.DisplayMode
 import com.kevin77688.jpflashcard.domain.SrsState
@@ -14,6 +16,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withTimeout
 
 /**
  * Cards live in Firestore under /users/{uid}/words and /users/{uid}/kana.
@@ -35,6 +39,35 @@ class CardRepository(private val auth: AuthRepository) {
             }
             awaitClose { reg.remove() }
         }
+    }
+
+    /**
+     * Whether what we show is confirmed by the server. Firestore listeners are live (changes from the
+     * other device arrive within seconds), so this is mostly for showing offline / unsent state.
+     */
+    data class SyncStatus(val fromCache: Boolean, val pendingWrites: Boolean, val serverAt: Long?)
+
+    val syncStatus: Flow<SyncStatus?> = auth.userFlow.flatMapLatest { user ->
+        if (user == null) flowOf(null) else callbackFlow {
+            var serverAt: Long? = null
+            val reg = userDoc(user.uid).collection("words").addSnapshotListener(MetadataChanges.INCLUDE) { snap, err ->
+                if (err != null) Log.w(TAG, "sync listener", err)
+                if (snap != null) {
+                    val meta = snap.metadata
+                    if (!meta.isFromCache) serverAt = System.currentTimeMillis()
+                    trySend(SyncStatus(meta.isFromCache, meta.hasPendingWrites(), serverAt))
+                }
+            }
+            awaitClose { reg.remove() }
+        }
+    }
+
+    /** Manual "sync now": reconnects Firestore and waits for a fresh copy from the server. */
+    suspend fun refresh() {
+        val uid = uidOrNull() ?: return
+        db.disableNetwork().await()
+        db.enableNetwork().await()
+        withTimeout(15_000) { userDoc(uid).collection("words").get(Source.SERVER).await() }
     }
 
     /** Kana progress keyed by card id (e.g. "h-か"). Missing ids are new cards. */

@@ -15,6 +15,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
@@ -79,6 +81,7 @@ fun WordsScreen(onAdd: () -> Unit, onOpen: (String) -> Unit, onReview: (String) 
                     Text("單字本", style = MaterialTheme.typography.headlineMedium)
                     Text("${words.size} 個單字", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
+                SyncButton()
                 if (words.isNotEmpty()) {
                     TextButton(onClick = { onReview("words-all") }) {
                         Icon(Icons.Rounded.Shuffle, null)
@@ -120,7 +123,13 @@ fun WordsScreen(onAdd: () -> Unit, onOpen: (String) -> Unit, onReview: (String) 
                     elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
                     modifier = Modifier.weight(1f, fill = false),
                 ) {
-                    LazyColumn(contentPadding = PaddingValues(vertical = 6.dp, horizontal = 0.dp)) {
+                    // A word added on another device lands at the top; LazyColumn would otherwise keep the
+                    // old first row in place and leave the new one scrolled out of view.
+                    val listState = rememberLazyListState()
+                    LaunchedEffect(filtered.firstOrNull()?.id) {
+                        if (listState.firstVisibleItemIndex <= 1) listState.scrollToItem(0)
+                    }
+                    LazyColumn(state = listState, contentPadding = PaddingValues(vertical = 6.dp, horizontal = 0.dp)) {
                         items(filtered, key = { it.id }) { w ->
                             WordRow(w, settings.kanaOnly, onClick = { onOpen(w.id) })
                         }

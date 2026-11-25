@@ -110,8 +110,9 @@ private fun Header() {
             color = MaterialTheme.colorScheme.primary,
         )
         Spacer(Modifier.height(4.dp))
-        Row(verticalAlignment = Alignment.Bottom) {
-            Text("今日の勉強", style = JaText.title.copy(fontSize = 30.sp, fontWeight = FontWeight.SemiBold))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("今日の勉強", style = JaText.title.copy(fontSize = 30.sp, fontWeight = FontWeight.SemiBold), modifier = Modifier.weight(1f))
+            SyncButton()
         }
     }
 }

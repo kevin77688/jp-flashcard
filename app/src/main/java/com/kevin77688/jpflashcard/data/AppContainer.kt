@@ -24,6 +24,7 @@ class AppContainer(context: Context) {
     val words = cards.words.stateIn(scope, SharingStarted.Eagerly, emptyList())
     val kanaProgress = cards.kanaProgress.stateIn(scope, SharingStarted.Eagerly, emptyMap())
     val settings = settingsRepo.settings.stateIn(scope, SharingStarted.Eagerly, Settings())
+    val syncStatus = cards.syncStatus.stateIn(scope, SharingStarted.Eagerly, null)
 
     /** Progress of "AI 補齊中文意思"; lives here so it keeps going when the user leaves the screen. */
     data class AiFill(val done: Int, val total: Int, val failed: Int, val running: Boolean, val error: String? = null)
